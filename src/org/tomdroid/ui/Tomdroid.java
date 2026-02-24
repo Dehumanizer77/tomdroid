@@ -89,6 +89,7 @@ import android.widget.ListAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.Manifest;
 
 public class Tomdroid extends ActionBarListActivity {
 
@@ -114,6 +115,9 @@ public class Tomdroid extends ActionBarListActivity {
 	private static final int DIALOG_REVERT_NOTE = 9;
 	private static final int DIALOG_SYNC_ERRORS = 10;
 	static final int DIALOG_SEND_CHOOSE = 11;
+
+	private static final int REQUEST_STORAGE_PERMISSION = 100;
+	private boolean pendingSyncPush = false;
 	private static final int DIALOG_VIEW_TAGS = 12;
 	private static final int DIALOG_NOT_FOUND_SHORTCUT = 13;
 
@@ -1018,6 +1022,23 @@ public class Tomdroid extends ActionBarListActivity {
 	@SuppressWarnings("deprecation")
 	private void startSyncing(boolean push) {
 
+		// On API 23+ check for storage permission before SD card sync
+		if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M
+				&& android.os.Build.VERSION.SDK_INT <= 28) {
+			SyncService svc = SyncManager.getInstance().getCurrentService();
+			if (svc != null && svc.needsLocation()) {
+				int perm = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+				if (perm != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+					pendingSyncPush = push;
+					requestPermissions(
+						new String[]{ Manifest.permission.WRITE_EXTERNAL_STORAGE,
+						              Manifest.permission.READ_EXTERNAL_STORAGE },
+						REQUEST_STORAGE_PERMISSION);
+					return;
+				}
+			}
+		}
+
 		String serverUri = Preferences.getString(Preferences.Key.SYNC_SERVER);
 		SyncService currentService = SyncManager.getInstance().getCurrentService();
 		
@@ -1065,6 +1086,18 @@ public class Tomdroid extends ActionBarListActivity {
 	private void resetSyncValues() {
 		Preferences.putLong(Preferences.Key.LATEST_SYNC_REVISION, (Long)Preferences.Key.LATEST_SYNC_REVISION.getDefault());
 		Preferences.putString(Preferences.Key.LATEST_SYNC_DATE, new Time().formatTomboy());
+	}
+
+	@Override
+	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+		super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+		if (requestCode == REQUEST_STORAGE_PERMISSION) {
+			if (grantResults.length > 0 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+				startSyncing(pendingSyncPush);
+			} else {
+				android.widget.Toast.makeText(this, "Storage permission is required for SD card sync", android.widget.Toast.LENGTH_LONG).show();
+			}
+		}
 	}
 
 	public void ViewNote(long noteId) {
