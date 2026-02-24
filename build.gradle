@@ -17,7 +17,7 @@ dependencies {
 
 android {
     namespace 'org.tomdroid'
-    compileSdkVersion 34
+    compileSdkVersion 33
 
     defaultConfig {
         minSdkVersion 16
