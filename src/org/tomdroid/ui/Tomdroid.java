@@ -397,7 +397,8 @@ public class Tomdroid extends ActionBarListActivity {
 
 		Uri intentUri = Uri.parse(Tomdroid.CONTENT_URI+"/"+noteId);
         dialogNote = NoteManager.getNote(this, intentUri);
-        
+
+        if (dialogNote == null) return;
         if(dialogNote.getTags().contains("system:deleted"))
         	inflater.inflate(R.menu.main_longclick_deleted, menu);
         else
@@ -457,20 +458,22 @@ public class Tomdroid extends ActionBarListActivity {
     	super.onDestroy();
     }
 
+	@Override
 	public void onResume() {
-		
+		super.onResume();
+
 		// if the SyncService was stopped because Android killed it, we should not show the progress dialog any more
-		if (SyncManager.getInstance().getCurrentService().activity == null) {
+		SyncService resumeService = SyncManager.getInstance().getCurrentService();
+		if (resumeService != null && resumeService.activity == null) {
 			TLog.i(TAG, "Android killed the SyncService while in background. We will remove the dialog now.");
 			removeDialog(DIALOG_SYNC);
 		}
-		
-		super.onResume();
+
 		Intent intent = this.getIntent();
 
 		SyncService currentService = SyncManager.getInstance().getCurrentService();
 
-		if (currentService.needsAuth() && intent != null) {
+		if (currentService != null && currentService.needsAuth() && intent != null) {
 			Uri uri = intent.getData();
 
 			if (uri != null && uri.getScheme().equals("tomdroid")) {
@@ -518,7 +521,7 @@ public class Tomdroid extends ActionBarListActivity {
 		AlertDialog alertDialog;
 		final ProgressDialog progressDialog = new ProgressDialog(this);
 		SyncService currentService = SyncManager.getInstance().getCurrentService();
-		String serviceDescription = currentService.getDescription();
+		String serviceDescription = currentService != null ? currentService.getDescription() : "";
     	final AlertDialog.Builder builder = new AlertDialog.Builder(this);
 
 		switch(id) {
@@ -689,7 +692,7 @@ public class Tomdroid extends ActionBarListActivity {
 	    switch(id) {
 	    	case DIALOG_SYNC:
 				SyncService currentService = SyncManager.getInstance().getCurrentService();
-				String serviceDescription = currentService.getDescription();
+				String serviceDescription = currentService != null ? currentService.getDescription() : "";
 	    		((ProgressDialog) dialog).setTitle(String.format(getString(R.string.syncing),serviceDescription));
 	    		((ProgressDialog) dialog).setMessage(dialogString);
 	    		((ProgressDialog) dialog).setOnCancelListener(new DialogInterface.OnCancelListener() {
@@ -1041,7 +1044,12 @@ public class Tomdroid extends ActionBarListActivity {
 
 		String serverUri = Preferences.getString(Preferences.Key.SYNC_SERVER);
 		SyncService currentService = SyncManager.getInstance().getCurrentService();
-		
+
+		if (currentService == null) {
+			TLog.w(TAG, "No sync service configured");
+			return;
+		}
+
 		if (currentService.needsAuth()) {
 	
 			// service needs authentication
@@ -1168,7 +1176,7 @@ public class Tomdroid extends ActionBarListActivity {
 		public void handleMessage(Message msg) {
 	
 			SyncService currentService = SyncManager.getInstance().getCurrentService();
-			String serviceDescription = currentService.getDescription();
+			String serviceDescription = currentService != null ? currentService.getDescription() : "";
 			String message = "";
 			boolean dismiss = false;
 
@@ -1195,7 +1203,7 @@ public class Tomdroid extends ActionBarListActivity {
 						TLog.v(TAG, "syncErrors: {0}", TextUtils.join("\n",errors.toArray()));
 						dialogString = getString(R.string.messageSyncError);
 						dialogBoolean = errors.save();
-						showDialog(DIALOG_SYNC_ERRORS);
+						safeShowDialog(DIALOG_SYNC_ERRORS);
 					}
 					break;
 				case SyncService.CONNECTING_FAILED:
@@ -1229,18 +1237,18 @@ public class Tomdroid extends ActionBarListActivity {
 					break;
 				case SyncService.SYNC_CONNECTED:
 					dialogString = getString(R.string.gettings_notes);
-					showDialog(DIALOG_SYNC);
+					safeShowDialog(DIALOG_SYNC);
 					break;
 				case SyncService.BEGIN_PROGRESS:
 					syncTotalNotes = msg.arg1;
 					syncProcessedNotes = 0;
 					dialogString = getString(R.string.syncing_local);
-					showDialog(DIALOG_SYNC);
+					safeShowDialog(DIALOG_SYNC);
 					break;
 				case SyncService.SYNC_PROGRESS:
 					if(msg.arg1 == 90) {
 						dialogString = getString(R.string.syncing_remote);						
-						showDialog(DIALOG_SYNC);
+						safeShowDialog(DIALOG_SYNC);
 					}
 					break;
 				case SyncService.NOTE_DELETED:
@@ -1316,16 +1324,30 @@ public class Tomdroid extends ActionBarListActivity {
 		}
 		else { // returning from sync conflict
 			SyncService currentService = SyncManager.getInstance().getCurrentService();
-			currentService.resolvedConflict(requestCode);			
+			if (currentService != null) currentService.resolvedConflict(requestCode);
 		}
 	}
 	
 	public void finishSync() {
 		TLog.v(TAG, "Finishing Sync");
-		
+
 		removeDialog(DIALOG_SYNC);
-		
+
 		if(rightPane != null)
 			showNoteInPane(lastIndex);
+	}
+
+	/**
+	 * Show a managed dialog only if the activity is in a valid state.
+	 * Guards against BadTokenException when called from background Handler messages.
+	 */
+	private void safeShowDialog(int id) {
+		if (isFinishing()) return;
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed()) return;
+		try {
+			showDialog(id);
+		} catch (Exception e) {
+			TLog.w(TAG, "safeShowDialog: could not show dialog {0}", id);
+		}
 	}
 }
