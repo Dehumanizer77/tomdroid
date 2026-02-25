@@ -85,6 +85,7 @@ import android.view.ContextMenu.ContextMenuInfo;
 import android.widget.AdapterView.AdapterContextMenuInfo;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.CursorAdapter;
 import android.widget.ListAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -92,6 +93,18 @@ import android.widget.Toast;
 import android.Manifest;
 
 public class Tomdroid extends ActionBarListActivity {
+
+	// Prevent any cursor from being registered in Activity.mManagedCursors.
+	// On some Android/OEM builds the framework calls startManagingCursor()
+	// internally for ListActivity cursor adapters. When the Activity restarts
+	// (e.g. back gesture from a note), performRestart() tries to requery those
+	// cursors and crashes if they have already been closed. We manage cursor
+	// lifecycle manually, so this registration is never needed.
+	@Override
+	@Deprecated
+	public void startManagingCursor(android.database.Cursor c) {
+		// intentionally empty
+	}
 
 	// Global definition for Tomdroid
 	public static final String	AUTHORITY			= "org.tomdroid.notes";
@@ -451,10 +464,31 @@ public class Tomdroid extends ActionBarListActivity {
 		return super.onContextItemSelected(item);
 	}
 	
+	@Override
+	protected void onStop() {
+		super.onStop();
+		// Samsung's modified framework registers the list adapter's cursor in
+		// Activity.mManagedCursors via internal paths that bypass our
+		// startManagingCursor() override. performRestart() then tries to
+		// requery() the cursor after it has been closed and crashes.
+		// Clearing the list after the framework has stopped the activity
+		// (and already deactivated any cursors) ensures performRestart()
+		// finds nothing to requery.
+		try {
+			java.lang.reflect.Field f = Activity.class.getDeclaredField("mManagedCursors");
+			f.setAccessible(true);
+			((java.util.List<?>) f.get(this)).clear();
+		} catch (Exception ignored) {}
+	}
+
     @Override
     protected void onDestroy() {
     	SyncManager.getInstance().cancel();
     	removeDialog(DIALOG_SYNC);
+		if (adapter instanceof CursorAdapter) {
+			Cursor cursor = ((CursorAdapter) adapter).swapCursor(null);
+			if (cursor != null) cursor.close();
+		}
     	super.onDestroy();
     }
 
@@ -831,9 +865,13 @@ public class Tomdroid extends ActionBarListActivity {
 
 	private void updateNotesList(String aquery, int aposition) {
 	    // adapter that binds the ListView UI to the notes in the note manager
+		if (adapter instanceof CursorAdapter) {
+			Cursor oldCursor = ((CursorAdapter) adapter).swapCursor(null);
+			if (oldCursor != null) oldCursor.close();
+		}
 		adapter = NoteManager.getListAdapter(this, aquery, rightPane != null ? aposition : -1);
 		setListAdapter(adapter);
-		
+
 	}
 	
 	private void updateEmptyList(String aquery) {
