@@ -299,6 +299,7 @@ public abstract class SyncService {
 			} while (localGuids.moveToNext());
 
 		}
+		if (localGuids != null) localGuids.close();
 		TLog.d(TAG, "Notes to pull: {0}, Notes to push: {1}, Notes to delete: {2}, Notes to compare: {3}",pullableNotes.size(),pushableNotes.size(),deleteableNotes.size(),comparableNotes.size());
 
 		if(cancelled) {
