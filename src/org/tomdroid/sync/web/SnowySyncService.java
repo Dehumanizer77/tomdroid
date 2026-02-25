@@ -209,61 +209,63 @@ public class SnowySyncService extends SyncService implements ServiceAuth {
 						sendMessage(LATEST_REVISION,(int)latestRemoteRevision,0);
 						TLog.d(TAG, "old latest sync revision: {0}, remote latest sync revision: {1}", latestLocalRevision, latestRemoteRevision);
 
-						Cursor newLocalNotes = NoteManager.getNewNotes(activity); 
-						
-						// same sync revision + no new local notes = no need to sync
-						
-						if (latestRemoteRevision <= latestLocalRevision && newLocalNotes.getCount() == 0) {
-							TLog.v(TAG, "old sync revision on server, cancelling");
-							finishSync(true);
-							return;
-						}
+						Cursor newLocalNotes = NoteManager.getNewNotes(activity);
+						try {
 
-						// don't get notes if older revision - only pushing notes
-						
-						if (push && latestRemoteRevision <= latestLocalRevision) {
-							TLog.v(TAG, "old sync revision on server, pushing new notes");
-							
+							// same sync revision + no new local notes = no need to sync
+
+							if (latestRemoteRevision <= latestLocalRevision && newLocalNotes.getCount() == 0) {
+								TLog.v(TAG, "old sync revision on server, cancelling");
+								finishSync(true);
+								return;
+							}
+
+							// don't get notes if older revision - only pushing notes
+
+							if (push && latestRemoteRevision <= latestLocalRevision) {
+								TLog.v(TAG, "old sync revision on server, pushing new notes");
+
+								JSONArray notes = response.getJSONArray("notes");
+								List<String> notesList = new ArrayList<String>();
+								for (int i = 0; i < notes.length(); i++)
+									notesList.add(notes.getJSONObject(i).optString("guid"));
+								prepareSyncableNotes(newLocalNotes);
+								setSyncProgress(50);
+								return;
+							}
+
+							// get notes list with content to find changes
+
+							TLog.v(TAG, "contacting " + notesUrl);
+							sendMessage(SYNC_CONNECTED);
+							rawResponse = auth.get(notesUrl + "?include_notes=true");
+							if(cancelled) {
+								doCancel();
+								return;
+							}
+							response = new JSONObject(rawResponse);
+							latestRemoteRevision = response.getLong("latest-sync-revision");
+							sendMessage(LATEST_REVISION,(int)latestRemoteRevision,0);
+
 							JSONArray notes = response.getJSONArray("notes");
-							List<String> notesList = new ArrayList<String>();
-							for (int i = 0; i < notes.length(); i++)
-								notesList.add(notes.getJSONObject(i).optString("guid"));
-							prepareSyncableNotes(newLocalNotes);
 							setSyncProgress(50);
-							return;
+
+							TLog.v(TAG, "number of notes: {0}", notes.length());
+
+							ArrayList<Note> notesList = new ArrayList<Note>();
+
+							for (int i = 0; i < notes.length(); i++)
+								notesList.add(new Note(notes.getJSONObject(i)));
+
+							if(cancelled) {
+								doCancel();
+								return;
+							}
+
+							prepareSyncableNotes(notesList);
+						} finally {
+							if (newLocalNotes != null) newLocalNotes.close();
 						}
-						
-						// get notes list with content to find changes
-						
-						TLog.v(TAG, "contacting " + notesUrl);
-						sendMessage(SYNC_CONNECTED);
-						rawResponse = auth.get(notesUrl + "?include_notes=true");
-						if(cancelled) {
-							doCancel();
-							return; 
-						}
-						response = new JSONObject(rawResponse);
-						latestRemoteRevision = response.getLong("latest-sync-revision");
-						sendMessage(LATEST_REVISION,(int)latestRemoteRevision,0);
-
-						JSONArray notes = response.getJSONArray("notes");
-						setSyncProgress(50);
-
-						TLog.v(TAG, "number of notes: {0}", notes.length());
-
-						ArrayList<Note> notesList = new ArrayList<Note>();
-
-						for (int i = 0; i < notes.length(); i++)
-							notesList.add(new Note(notes.getJSONObject(i)));
-
-						if(cancelled) {
-							doCancel();
-							return; 
-						}						
-						
-						// close cursor
-						newLocalNotes.close();
-						prepareSyncableNotes(notesList);
 						
 					} catch (JSONException e) {
 						TLog.e(TAG, e, "Problem parsing the server response");
