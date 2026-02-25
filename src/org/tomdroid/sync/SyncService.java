@@ -201,7 +201,7 @@ public abstract class SyncService {
 		localGuids.moveToFirst();
 		do {
 			Note note = NoteManager.getNoteByGuid(activity, localGuids.getString(localGuids.getColumnIndexOrThrow(Note.GUID)));
-			
+			if (note == null) continue;
 			if(!note.getTags().contains("system:template")) // don't push templates TODO: find out what's wrong with this, if anything
 				pushableNotes.add(note);
 		} while (localGuids.moveToNext());
@@ -282,6 +282,10 @@ public abstract class SyncService {
 				
 				if(!remoteGuids.contains(localGuid)) {
 					Note note = NoteManager.getNoteByGuid(this.activity, localGuid);
+					if (note == null) {
+						TLog.w(TAG, "getNoteByGuid returned null for guid {0}, skipping", localGuid);
+						continue;
+					}
 					String syncDateString = Preferences.getString(Preferences.Key.LATEST_SYNC_DATE);
 					Time syncDate = new Time();
 					syncDate.parseTomboy(syncDateString);
@@ -295,6 +299,7 @@ public abstract class SyncService {
 			} while (localGuids.moveToNext());
 
 		}
+		if (localGuids != null) localGuids.close();
 		TLog.d(TAG, "Notes to pull: {0}, Notes to push: {1}, Notes to delete: {2}, Notes to compare: {3}",pullableNotes.size(),pushableNotes.size(),deleteableNotes.size(),comparableNotes.size());
 
 		if(cancelled) {
