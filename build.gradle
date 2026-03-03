@@ -19,11 +19,20 @@ android {
     namespace 'org.tomdroid'
     compileSdkVersion 33
 
+    signingConfigs {
+        release {
+            storeFile file('release-key.jks')
+            storePassword project.findProperty('storePassword') ?: ''
+            keyAlias 'dehumanizer77'
+            keyPassword project.findProperty('keyPassword') ?: ''
+        }
+    }
+
     defaultConfig {
         minSdkVersion 16
         targetSdkVersion 33
         versionCode 15
-        versionName "0.8.0dev"
+        versionName "0.8.0-dehumanizer77"
     }
 
     useLibrary 'org.apache.http.legacy'
@@ -56,6 +65,7 @@ android {
     buildTypes {
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
         }
     }
 }
