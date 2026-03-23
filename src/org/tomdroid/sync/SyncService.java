@@ -248,7 +248,7 @@ public abstract class SyncService {
 						}
 					} while (cursor.moveToNext());
 				}
-				cursor.close();
+				if (cursor != null) cursor.close();
 				
 				if(localNote == null)
 					pullableNotes.add(remoteNote);
@@ -292,7 +292,7 @@ public abstract class SyncService {
 					int compareSync = Time.compare(syncDate, note.getLastChangeDate());
 					if(compareSync > 0) // older than last sync, means it's been deleted from server
 						deleteableNotes.add(note);
-					else if(!note.getTags().contains("system:template")) // don't push templates TODO: find out what's wrong with this, if anything
+					else if(note.getTags() == null || !note.getTags().contains("system:template")) // don't push templates TODO: find out what's wrong with this, if anything
 						pushableNotes.add(note);
 				}
 				
@@ -370,7 +370,7 @@ public abstract class SyncService {
 				pullableNotes.add(remoteNote);
 			}
 			else { // both same date
-				if(localNote.getTags().contains("system:deleted") && push) { // deleted, bundle for remote deletion
+				if(localNote.getTags() != null && localNote.getTags().contains("system:deleted") && push) { // deleted, bundle for remote deletion
 					TLog.i(TAG, "Notes are same date, deleted, deleting remote: TITLE:{0} GUID:{1}", localNote.getTitle(), localNote.getGuid());
 					pushableNotes.add(localNote);
 				}
