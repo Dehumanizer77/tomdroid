@@ -358,8 +358,14 @@ public class SnowySyncService extends SyncService implements ServiceAuth {
 					String rawResponse = auth.get(userRef);
 					if(cancelled) {
 						doCancel();
-						return; 
-					}		
+						return;
+					}
+					if (rawResponse == null || rawResponse.length() == 0) {
+						TLog.e(TAG, "Server returned empty response for user API");
+						sendMessage(CONNECTING_FAILED);
+						setSyncProgress(100);
+						return;
+					}
 					try {
 						TLog.v(TAG, "creating JSON");
 
@@ -369,8 +375,8 @@ public class SnowySyncService extends SyncService implements ServiceAuth {
 						for(Note note : notes) {
 							JSONObject Jnote = new JSONObject();
 							Jnote.put("guid", note.getGuid());
-							
-							if(note.getTags().contains("system:deleted")) // deleted note
+							String tags = note.getTags();
+							if(tags != null && tags.contains("system:deleted")) // deleted note
 								Jnote.put("command","delete");
 							else { // changed note
 								Jnote.put("title", XmlUtils.escape(note.getTitle()));
@@ -383,25 +389,33 @@ public class SnowySyncService extends SyncService implements ServiceAuth {
 							Jnotes.put(Jnote);
 						}
 						data.put("note-changes", Jnotes);
-						
+
 						JSONObject response = new JSONObject(rawResponse);
 						if(cancelled) {
 							doCancel();
-							return; 
-						}		
+							return;
+						}
 						String notesUrl = response.getJSONObject("notes-ref")
 								.getString("api-ref");
 
 						TLog.v(TAG, "put url: {0}", notesUrl);
-						
+
 						if(cancelled) {
 							doCancel();
-							return; 
-						}	
-						
+							return;
+						}
+
 						TLog.v(TAG, "pushing data to remote service: {0}",data.toString());
-						response = new JSONObject(auth.put(notesUrl,
-								data.toString()));
+						String putResponse = auth.put(notesUrl, data.toString());
+						if (putResponse == null || putResponse.length() == 0) {
+							TLog.e(TAG, "Server returned empty response for note push");
+							sendMessage(NOTE_PUSH_ERROR,
+									ErrorList.createErrorWithContents(
+											"Empty server response", "empty", null, ""));
+							setSyncProgress(100);
+							return;
+						}
+						response = new JSONObject(putResponse);
 
 						TLog.v(TAG, "put response: {0}", response.toString());
 						latestRemoteRevision = response.getLong("latest-sync-revision");
@@ -412,11 +426,13 @@ public class SnowySyncService extends SyncService implements ServiceAuth {
 						sendMessage(NOTE_PUSH_ERROR,
 								ErrorList.createErrorWithContents(
 										"JSON parsing", "json", e, rawResponse));
+						setSyncProgress(100);
 						return;
 					}
 				} catch (java.net.UnknownHostException e) {
 					TLog.e(TAG, "Internet connection not available");
 					sendMessage(NO_INTERNET);
+					setSyncProgress(100);
 					return;
 				}
 				// success, finish sync

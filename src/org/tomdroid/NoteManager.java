@@ -110,7 +110,8 @@ public class NoteManager {
 			note.setTitle(noteTitle);
 			note.setXmlContent(stripTitleFromContent(noteContent, noteTitle));
 			note.setLastChangeDate(noteChangeDate);
-			note.addTag(noteTags);
+			if (noteTags != null)
+				note.addTag(noteTags);
 			note.setGuid(noteGUID);
 			note.setDbId(noteDbid);
 			return note;
@@ -141,7 +142,7 @@ public class NoteManager {
 			note.setTitle(noteTitle);
 			note.setXmlContent(stripTitleFromContent(noteContent, noteTitle));
 			note.setLastChangeDate(noteChangeDate);
-			note.setTags(noteTags);
+			note.setTags(noteTags != null ? noteTags : "");
 			note.setGuid(noteGUID);
 			note.setDbId(noteDbid);
 		}
